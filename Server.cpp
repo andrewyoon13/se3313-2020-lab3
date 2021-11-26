@@ -7,12 +7,51 @@
 #include <algorithm>
 
 using namespace Sync;
+std::string 
+
+class SocketThread : public Thread      // client connection
+{
+private:
+    Socket& socket;     // this is the connected socket
+    ByteArray data;     // data
+public:
+    SocketThread(Socket& socket)
+    : socket(socket)
+    {}
+    ~SocketThread()
+    {}
+    Socket& GetSocket() {
+        return socket;
+    }
+    virtual long ThreadMain() {
+        while(1) {
+            try {
+                socket.Read(data);
+                std:cout << "Reading Data." << std::endl;
+                std::string st = data.ToString();
+                if (st == "Y") {
+                    std::cout << "Socket has been termninated. Press 'Enter' to clsoe the server" << std::endl;
+                    break;
+                }
+                std::reverse(st.begin(), st.end());
+                data = ByteArray(st);
+                std::cout << "Sending the data" << st << std::endl;
+                socket.Write(data);
+                std::cout << "Data has been sent" << std::endl;
+            }
+            catch(...){}
+        }
+        return 0;
+    }
+}
 
 // This thread handles the server operations
 class ServerThread : public Thread
 {
 private:
     SocketServer& server;
+    std::vector<SocketThread*> socketThreadVector;
+    bool terminate = false;
 public:
     ServerThread(SocketServer& server)
     : server(server)
@@ -22,10 +61,15 @@ public:
     {
         // Cleanup
 	//...
+        for (int x = 0; x < socketThreadVector.size(); x++) {
+            Socket&  socket = socketThreadVector[x]->GetSocket();
+            socket.Close();
+        }
     }
 
     virtual long ThreadMain()
     {
+        while(true) {
         // Wait for a client socket connection
         Socket* newConnection = new Socket(server.Accept());
 
@@ -36,7 +80,8 @@ public:
         //socketReference.Read(data);
         // Send it back
         //socketReference.Write(data);
-	return 1;
+        socketThreadVector.push_back(new SocketThread(socketReference));
+        }
     }
 };
 
@@ -54,6 +99,7 @@ int main(void)
     // This will wait for input to shutdown the server
     FlexWait cinWaiter(1, stdin);
     cinWaiter.Wait();
+    std::cin.get();
 
     // Shut down and clean up the server
     server.Shutdown();
